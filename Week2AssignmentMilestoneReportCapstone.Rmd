@@ -1,0 +1,166 @@
+---
+title: "Capstone Week2 Text Mining/n-grams"
+author: "GaryFH"
+date: "October 12, 2017"
+output: html_document
+---
+
+##Setup work environment
+
+```{r warning=F,message=F}
+library(tm)
+library(stringi)
+library(wordcloud)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(knitr)
+library(RWeka)
+options(digits = 2)
+```
+
+##Load "en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt" into the R work environment
+
+```{r warning=F,message=F}
+
+en_blog <- readLines(file("en_US.blogs.txt"), skipNul = TRUE)
+en_twit <- readLines(file("en_US.twitter.txt"), skipNul = TRUE)
+en_news <- readLines(file("en_US.news.txt"), skipNul = TRUE)
+
+
+```
+
+
+
+##Look at data sets
+
+```{r warning=F,message=F}
+l1<-length(en_blog)
+l2<-length(en_twit)
+l3<-length(en_news)
+#object.size(en_blog)
+s1<-as.double(round(file.info("en_US.blogs.txt")$size/2^20,2))
+s2<-as.double(round(file.info("en_US.twitter.txt")$size/2^20,2))
+s3<-as.double(round(file.info("en_US.news.txt")$size/2^20,2))
+w1<-sum(stri_count_words(en_blog))
+w2<-sum(stri_count_words(en_twit))
+w3<-sum(stri_count_words(en_news))
+
+b0<-c("Number of LINES","FileSize in MB","Number of WORDS")
+b1<-c(l1,s1,w1)
+b2<-c(l2,s2,w2)
+b3<-c(l3,s3,w3)
+tbl<-as.table(rbind(Table=b0,Blog=b1,Twit=b2,News=b3))
+kable(tbl)
+
+```
+
+
+
+##Large data sets - Get sample of datasets (6,000 long) for easier handling is future work
+
+```{r warning=F,message=F}
+set.seed(123)
+blogsample<-sample(en_blog,6000)
+twitsample<-sample(en_twit,6000)
+newssample<-sample(en_news,6000)
+
+length(blogsample)
+length(twitsample)
+length(newssample)
+
+```
+
+
+
+##Data Cleaning - remove unwanted characters
+
+```{r warning=F,message=F}
+blogclean<- iconv(blogsample, 'UTF-8', 'ASCII', "byte")
+twitclean<- iconv(twitsample, 'UTF-8', 'ASCII', "byte")
+newsclean<- iconv(newssample, 'UTF-8', 'ASCII', "byte")
+
+```
+
+
+##Combine data sets into one data set
+
+```{r warning=F,message=F}
+
+totalclean<-c(blogclean,twitclean,newsclean)
+
+```
+
+
+
+##Make Corpus and convert to lower case then remove punctuations then remove digits then remove whitespace then force to plaintext
+
+
+```{r warning=F,message=F}
+
+corpus<-Corpus(VectorSource(as.data.frame(totalclean,stringsAsFactors = FALSE)))
+
+corpus<- tm_map(corpus, tolower)
+
+corpus<- tm_map(corpus, removePunctuation)
+
+corpus<- tm_map(corpus, removeNumbers)
+
+corpus<- tm_map(corpus, stripWhitespace)
+
+corpus<- tm_map(corpus, PlainTextDocument)
+
+
+
+```
+
+##Just for fun,  play with wordcloud (I am not sure why everyone does this but it looks cool!)
+
+```{r warning=F,message=F}
+wc1 <- TermDocumentMatrix(corpus)
+wc2<- as.matrix(wc1)
+wc3 <- sort(rowSums(wc2), decreasing=TRUE) 
+dm <- data.frame(word=names(wc3), freq=wc3)
+wordcloud(dm$word, dm$freq, min.freq= 200, max.words = 500,random.order=TRUE, colors=brewer.pal(6, "Dark2"))
+
+```
+
+
+
+
+###N-grams of texts are extensively used in text mining and natural language processing tasks. They are basically a set of co-occuring words within a given window - first I will use RWeka to create ngrams with NGramTokenizer
+
+```{r warning=F,message=F}
+unigram <- NGramTokenizer(corpus, Weka_control(min = 1, max = 1))
+bigram <- NGramTokenizer(corpus, Weka_control(min = 2, max = 2))
+trigram <- NGramTokenizer(corpus, Weka_control(min = 3, max = 3))
+fourgram<- NGramTokenizer(corpus, Weka_control(min = 4, max = 4))
+
+```
+
+
+
+
+##As an example plot frequency of top 10 fourgrams
+
+```{r warning=F,message=F}
+fourgramdf <- tbl_df(as.data.frame((table(fourgram))))
+fourgramdf <- arrange(fourgramdf,desc(Freq))
+fourgramtop10<-head(fourgramdf,10)
+
+ggplot(fourgramtop10, aes(x=reorder(fourgram,-Freq), y=Freq)) +
+        #stat="Identity", fill="#0047AB"
+  geom_bar(stat = "Identity", fill="red")+
+  xlab("fourgrams") + ylab("Frequency")+
+  ggtitle("Top ten fourgrams") +
+  theme(axis.text.x=element_text(angle=90, hjust=1))
+
+
+
+```
+
+
+##Summary
+####I am working with a sample data set since the whole data sets are large and take too much time. Using n-grams fequency's I could predict the next word being typed. This seems like a good application for machine learning algorithms - that is for future assignments. It will be important to develop a "dictionary" of n-grams and then separate out the last work from each n-gram (thus a fourgram would become a pair trigram/unigram and this "pair" would be stored in the dictionary).   Thus when an algorithm is developed it will allow the user to enter text and the algorithm will use the frequency of the "pairs" in the dictionary as the basis to predict the next word to be typed.
+
+

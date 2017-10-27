@@ -1,0 +1,148 @@
+---
+title: "CapstoneProjectFinalProject"
+author: "GaryFH"
+date: "October 25, 2017"
+output: html_document
+---
+
+##Setup work environment
+
+```{r warning=F,message=F}
+library(tm)
+library(stringi)
+library(wordcloud)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(knitr)
+library(RWeka)
+library(futile.logger)
+library(SnowballC)
+library(doParallel)
+library(textcat)
+library(stringr)
+
+options(digits = 2)
+```
+
+##Load "en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt" into the R work environment and check time
+
+```{r warning=F,message=F}
+getdata_start=proc.time()
+blog <- readLines(file("en_US.blogs.txt"), skipNul = TRUE)
+twit <- readLines(file("en_US.twitter.txt"), skipNul = TRUE)
+news <- readLines(file("en_US.news.txt"), skipNul = TRUE)
+badwords<-readLines(file( "https://raw.githubusercontent.com/shutterstock/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en"),skipNul = TRUE)
+getdata_stop=proc.time()
+getdata_time=getdata_stop-getdata_start
+getdata_time
+totaldata<-c(blog,twit,news)
+
+```
+
+#make a function to clean data   x=datasource
+
+```{r warning=F,message=F}
+
+GFtextcleaner<-function(x) {
+              
+      GFtext <- Corpus(VectorSource((x)))
+      GFtext <- tm_map(GFtext, PlainTextDocument)
+      GFtext <- tm_map(GFtext, stripWhitespace)
+      GFtext<- tm_map(GFtext, content_transformer(tolower))
+      GFtext <- tm_map(GFtext, removePunctuation)
+      GFtext <- tm_map(GFtext, removeNumbers)
+      GFtext <- tm_map(GFtext, removeWords, badwords)
+      GFtext <- tm_map(GFtext, stripWhitespace)
+     
+#      GFtext <- tm_map(GFtext, removeWords, c("a","and","the","an"))
+#      GFtext <- tm_map(GFtext,removeWords,stopwords(kind="en"))
+      
+      data.frame(sapply(GFtext,as.character),stringsAsFactors = FALSE) 
+      
+}
+
+
+```
+
+
+#Make a function with Weka to creat a corpus as needed  x=datasource,y=number of "grams"
+
+```{r warning=F,message=F}
+GFcorpuscreate<-function (x,y){
+      arrange(tbl_df(data.frame(table(NGramTokenizer(x,Weka_control(min=y, max=y))))),desc(Freq))
+}
+
+
+
+```
+
+
+#Make training and test datasets 
+
+```{r warning=F,message=F}
+set.seed(234)
+
+GFtrain<-sample(totaldata,40000)
+#GFtest<-sample(totaldata,1000)
+
+
+```
+
+
+
+#Create Function to make n-grams  x=datasource,y=number of "grams"
+
+```{r warning=F,message=F}
+GFgrammaker<-function(x,y) {
+        GFcorpuscreate(GFtextcleaner(x),y)
+        
+}
+
+
+```
+
+
+
+
+#create and save n-grams (2, 3 & 4grams)
+
+```{r warning=F,message=F}
+
+#GFgram1<-GFgrammaker(GFtrain,1)
+#GFgram1$pred<-"n/a"
+#rowname1<-c(1:nrow(GFgram1))
+#saveRDS(GFgram1, file="GFgram1.rds")
+
+GFgram2<-GFgrammaker(GFtrain,2)
+rowname2<-c(1:nrow(GFgram2))
+GFgram2$word1 <-word(GFgram2$Var1,1)
+GFgram2$word2 <-word(GFgram2$Var1,2)
+saveRDS(GFgram2, file="GFgram2.rds")
+
+GFgram3<-GFgrammaker(GFtrain,3)
+rowname3<-c(1:nrow(GFgram3))
+GFgram3$word1 <-word(GFgram3$Var1,1)
+GFgram3$word2 <-word(GFgram3$Var1,2)
+GFgram3$word3 <-word(GFgram3$Var1,3)
+saveRDS(GFgram3, file="GFgram3.rds")
+
+GFgram4<-GFgrammaker(GFtrain,4)
+GFgram4$word1 <-word(GFgram4$Var1,1)
+GFgram4$word2 <-word(GFgram4$Var1,2)
+GFgram4$word3 <-word(GFgram4$Var1,3)
+GFgram4$word4 <-word(GFgram4$Var1,4)
+saveRDS(GFgram4, file="GFgram4.rds")
+
+
+#GFgram5<-GFgrammaker(GFtrain,5)
+
+#head(GFgram1)
+head(GFgram2)
+head(GFgram3)
+head(GFgram4)
+```
+
+
+
+

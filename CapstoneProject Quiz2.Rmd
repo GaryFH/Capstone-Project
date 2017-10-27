@@ -1,0 +1,350 @@
+---
+title: "CapstoneProject Quiz2"
+author: "GaryFH"
+date: "October 19, 2017"
+output: html_document
+---
+
+##Setup work environment
+
+```{r warning=F,message=F}
+library(tm)
+library(stringi)
+library(wordcloud)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+library(knitr)
+library(RWeka)
+library(futile.logger)
+library(SnowballC)
+library(doParallel)
+library(textcat)
+library(stringr)
+
+options(digits = 2)
+```
+
+##Load "en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt" into the R work environment and check time
+
+```{r warning=F,message=F}
+getdata_start=proc.time()
+blog <- readLines(file("en_US.blogs.txt"), skipNul = TRUE)
+twit <- readLines(file("en_US.twitter.txt"), skipNul = TRUE)
+news <- readLines(file("en_US.news.txt"), skipNul = TRUE)
+badwords<-readLines(file( "https://raw.githubusercontent.com/shutterstock/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en"),skipNul = TRUE)
+getdata_stop=proc.time()
+getdata_time=getdata_stop-getdata_start
+getdata_time
+totaldata<-c(blog,twit,news)
+
+```
+
+#make a function to clean data
+
+```{r warning=F,message=F}
+
+GFtextcleaner<-function(x) {
+              
+      GFtext <- Corpus(VectorSource((x)))
+      GFtext <- tm_map(GFtext, PlainTextDocument)
+      GFtext <- tm_map(GFtext, stripWhitespace)
+      GFtext<- tm_map(GFtext, content_transformer(tolower))
+      GFtext <- tm_map(GFtext, removePunctuation)
+      GFtext <- tm_map(GFtext, removeNumbers)
+      GFtext <- tm_map(GFtext, removeWords, badwords)
+      GFtext <- tm_map(GFtext, stripWhitespace)
+     
+#      GFtext <- tm_map(GFtext, removeWords, c("a","and","the","an"))
+#      GFtext <- tm_map(GFtext,removeWords,stopwords(kind="en"))
+      
+      data.frame(sapply(GFtext,as.character),stringsAsFactors = FALSE) 
+      
+}
+
+
+```
+
+
+#Make a function with Weka to creat a corpus as needed  x=datasource,y=number of "grams"
+
+```{r warning=F,message=F}
+GFcorpuscreate<-function (x,y){
+      arrange(tbl_df(data.frame(table(NGramTokenizer(x,Weka_control(min=y, max=y))))),desc(Freq))
+}
+
+
+```
+
+
+#Make training and test datasets 
+
+```{r warning=F,message=F}
+set.seed(234)
+
+GFtrain<-sample(totaldata,4000)
+GFtest<-sample(totaldata,1000)
+
+
+```
+
+
+
+#Create Function to make n-grams  x=datasource,y=number of "grams"
+
+```{r warning=F,message=F}
+GFgrammaker<-function(x,y) {
+        GFcorpuscreate(GFtextcleaner(x),y)
+        
+}
+
+
+```
+
+
+
+
+#work with training data
+
+```{r warning=F,message=F}
+
+GFgram1<-GFgrammaker(GFtrain,1)
+GFgram1$pred<-"n/a"
+rowname1<-c(1:nrow(GFgram1))
+
+GFgram2<-GFgrammaker(GFtrain,2)
+rowname2<-c(1:nrow(GFgram2))
+GFgram2$word1 <-word(GFgram2$Var1,1)
+GFgram2$word2 <-word(GFgram2$Var1,2)
+
+GFgram3<-GFgrammaker(GFtrain,3)
+rowname3<-c(1:nrow(GFgram3))
+GFgram3$word1 <-word(GFgram3$Var1,1)
+GFgram3$word2 <-word(GFgram3$Var1,2)
+GFgram3$word3 <-word(GFgram3$Var1,3)
+GFgram4<-GFgrammaker(GFtrain,4)
+GFgram5<-GFgrammaker(GFtrain,5)
+
+head(GFgram1)
+head(GFgram2)
+head(GFgram3)
+```
+
+
+
+#Work with test data
+
+```{r warning=F,message=F}
+set.seed(132)
+GFtest3<-GFgrammaker(GFtrain,3)
+rownames(GFtest3) <- c(1:nrow(GFtest3))
+GFtest3$word1 <-word(GFtest3$Var1,1)
+GFtest3$word2 <-word(GFtest3$Var1,2)
+GFtest3$word3 <-word(GFtest3$Var1,3)
+
+
+
+
+```
+
+
+#
+
+```{r warning=F,message=F}
+
+removecores<- detectCores() - 1
+GFcluster <- makeCluster(removecores)
+clusterExport(cl=GFcluster, varlist=c("GFgram2","GFgram3","GFtest3"))
+
+GFtest3$pred1 <- parLapply(cl=GFcluster, X = 1:nrow(GFtest3), fun = function(x) GFgram2$word2[GFgram2$word1==GFtest3$word2[x]][1]) 
+
+GFtest3$pred2 <- parLapply(cl=GFcluster, X = 1:nrow(GFtest3), fun = function(x) GFgram3$word3[GFgram3$word1==GFtest3$word1[x] & GFgram3$word2==GFtest3$word2[x]][1])
+stopCluster(GFcluster)
+
+GFtest3$correct1 <- ifelse(GFtest3$word3==GFtest3$pred1,1,0)
+GFtest3$correct2 <- ifelse(GFtest3$word3==GFtest3$pred2,1,0)
+head(GFtest3)
+
+
+
+```
+
+
+
+#look at percentage of correct
+
+```{r warning=F,message=F}
+
+100*(sum(GFtest3$correct1,na.rm = TRUE)/nrow(GFtest3))
+
+100*(sum(GFtest3$correct2,na.rm = TRUE)/nrow(GFtest3))
+
+```
+
+
+#
+
+```{r warning=F,message=F}
+
+inputData2 <- rbind(
+
+  c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of", "beer", "cheese", "pretzels", "soda"), 
+
+  c( "You're the reason why I smile everyday. Can you follow me please? It would mean the", "world", "most", "universe", "best"), 
+
+  c( "Hey sunshine, can you follow me and make me the", "smelliest", "saddest", "bluest", "happiest"), 
+
+  c( "Very early observations on the Bills game: Offense still struggling but the", "referees", "players", "defense", "crowd"), 
+
+  c( "Go on a romantic date at the", "movies", "mall", "grocery", "beach"), 
+
+  c( "Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my", "motorcycle", "way", "phone", "horse"), 
+
+  c( "Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some", "time", "weeks", "thing", "years"), 
+
+  c( "After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little", "eyes", "fingers", "toes", "ears"), 
+
+  c( "Be grateful for the good times and keep the faith during the", "sad", "bad", "hard", "worse"), 
+
+  c( "If this isn't the cutest thing you've ever seen, then you must be", "callous", "insane", "insensitive", "asleep"),
+
+  c("When you breathe, I want to be the air for you. I'll be there for you, I'd live and I'd","die","give","sleep","eat"),
+
+  c("Guy at my table's wife got up to go to the bathroom and I asked about dessert and he started telling me about his","horticultural","spiritual","financial","marital"),
+
+  c("I'd give anything to see arctic monkeys this","month","morning","weekend","decade"),
+
+  c("Talking to your mom has the same effect as a hug and helps reduce your","sleepiness","happiness","stress","hunger"),
+
+  c("When you were in Holland you were like 1 inch away from me but you hadn't time to take a","look","minute","picture","walk"),
+
+  c("I'd just like all of these questions answered, a presentation of evidence, and a jury to settle the","incident","case","account","matter"),
+
+  c("I can't deal with unsymetrical things. I can't even hold an uneven number of bags of groceries in each","finger","hand","arm","toe"),
+
+  c("Every inch of you is perfect from the bottom to the","center","middle","top","side"),
+
+  c("I’m thankful my childhood was filled with imagination and bruises from playing","outside","daily","inside","weekly"),
+
+  c("I like how the same people are in almost all of Adam Sandler's","pictures","novels","movies","stories")
+
+  )
+
+inputData <- rbind(
+
+  c("The guy in front of me just bought a pound of bacon, a bouquet, and a case of"), 
+
+  c( "You're the reason why I smile everyday. Can you follow me please? It would mean the"),
+
+  c( "Hey sunshine, can you follow me and make me the"), 
+
+  c( "Very early observations on the Bills game: Offense still struggling but the"), 
+
+  c( "Go on a romantic date at the"), 
+
+  c( "Well I'm pretty sure my granny has some old bagpipes in her garage I'll dust them off and be on my"), 
+
+  c( "Ohhhhh #PointBreak is on tomorrow. Love that film and haven't seen it in quite some"), 
+
+  c( "After the ice bucket challenge Louis will push his long wet hair out of his eyes with his little"), 
+
+  c( "Be grateful for the good times and keep the faith during the"), 
+
+  c( "If this isn't the cutest thing you've ever seen, then you must be"),
+
+  c("When you breathe, I want to be the air for you. I'll be there for you, I'd live and I'd"),
+
+  c("Guy at my table's wife got up to go to the bathroom and I asked about dessert and he started telling me about his"),
+
+  c("I'd give anything to see arctic monkeys this"),
+
+  c("Talking to your mom has the same effect as a hug and helps reduce your"),
+
+  c("When you were in Holland you were like 1 inch away from me but you hadn't time to take a"),
+
+  c("I'd just like all of these questions answered, a presentation of evidence, and a jury to settle the"),
+
+  c("I can't deal with unsymetrical things. I can't even hold an uneven number of bags of groceries in each"),
+
+  c("Every inch of you is perfect from the bottom to the"),
+
+  c("I’m thankful my childhood was filled with imagination and bruises from playing"),
+
+  c("I like how the same people are in almost all of Adam Sandler's")
+
+  )
+
+#quiz2 <- as.data.frame( as.list(inputData))
+#quiz2<-GFtextcleaner(quiz2)
+quiz2 <- gsub("[^a-zA-Z0-9 ]","",inputData)
+quiz2 <- as.data.frame(inputData, stringsAsFactors = FALSE)
+quiz2<-data.frame(lapply(quiz2, function(v) {
+if (is.character(v)) return(tolower(v))
+ else return(v)
+}))
+#quiz2gram_3 <- GFtextcleaner(quiz2)
+quiz2gram_3 <- as.data.frame(trimws(quiz2[,],"right"))
+
+head(quiz2gram_3)
+```
+
+
+
+
+#
+
+```{r warning=F,message=F}
+rownames(quiz2gram_3) <- c(1:nrow(quiz2gram_3))
+gsub("   ", " ", quiz2gram_3[,1])
+
+
+gsub("  ", " ", quiz2gram_3[,1])
+
+```
+
+
+
+
+
+#
+
+```{r warning=F,message=F}
+quiz2gram_3$word1 <- word(quiz2gram_3[,1],-3)
+quiz2gram_3$word2 <- word(quiz2gram_3[,1],-2)
+quiz2gram_3$word3 <- word(quiz2gram_3[,1],-1)
+
+no_cores <- detectCores() - 1
+clus <- makeCluster(no_cores)
+clusterExport(cl=clus, varlist=c("GFgram2","GFgram3","quiz2gram_3"))
+quiz2gram_3$pred1 <- parLapply(cl=clus, X = 1:nrow(quiz2gram_3), fun = function(x) GFgram2$word2[GFgram2$word1==quiz2gram_3$word3[x]][1]) 
+quiz2gram_3$pred2 <- parLapply(cl=clus, X = 1:nrow(quiz2gram_3), fun = function(x) GFgram3$word3[GFgram3$word1==quiz2gram_3$word2[x] & GFgram3$word2==quiz2gram_3$word3[x]][1])
+stopCluster(clus)
+
+quiz2gram_3
+
+```
+
+
+
+
+
+#
+
+```{r warning=F,message=F}
+
+
+```
+
+
+
+
+
+#
+
+```{r warning=F,message=F}
+
+
+```
+
+
+

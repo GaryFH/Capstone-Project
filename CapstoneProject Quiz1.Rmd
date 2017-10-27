@@ -1,0 +1,134 @@
+---
+title: "Capstone Week2 Text Mining/n-grams"
+author: "GaryFH"
+date: "October 12, 2017"
+output: html_document
+---
+
+##Setup work environment
+
+```{r warning=F,message=F}
+library(tm)
+library(stringi)
+library(wordcloud)
+library(ggplot2)
+library(dplyr)
+library(RColorBrewer)
+```
+
+##Load "en_US.blogs.txt", "en_US.news.txt", "en_US.twitter.txt" into the R work environment
+
+```{r warning=F,message=F}
+
+en_blog <- readLines(file("en_US.blogs.txt"), skipNul = TRUE)
+en_twit <- readLines(file("en_US.twitter.txt"), skipNul = TRUE)
+en_news <- readLines(file("en_US.news.txt"), skipNul = TRUE)
+
+
+```
+
+##Find longest line in each data set above
+
+```{r warning=F,message=F}
+en_blog_long<-stri_length(en_blog)
+max(en_blog_long)
+
+
+en_news_long<-stri_length(en_news)
+max(en_news_long)
+
+en_twit_long<-stri_length(en_twit)
+max(en_twit_long)
+
+
+```
+
+##.In the en_US twitter data set, if you divide the number of lines where the word “love” (all lowercase) occurs by the number of lines the word “hate” (all lowercase) occurs, about what do you get? Is = 4
+
+```{r warning=F,message=F}
+
+lovetwit<-grep("love",en_twit)
+
+lovenews<-grep("love",en_news)
+
+loveblog<-grep("love",en_blog)
+
+hatetwit<-grep("hate",en_twit)
+
+hatenews<-grep("hate",en_news)
+
+hateblog<-grep("hate",en_blog)
+
+
+length(lovetwit)/length(hatetwit)
+length(lovenews)/length(hatenews)
+length(loveblog)/length(hateblog)
+
+```
+
+##The one tweet in the en_US twitter data set that matches the word “biostats” says what? As below
+
+```{r warning=F,message=F}
+
+Twit_biostat<-grep("biostats",en_twit)
+en_twit[Twit_biostat]
+
+
+
+```
+
+##How many tweets have the exact characters “A computer once beat me at chess, but it was no match for me at kickboxing”. (I.e. the line matches those characters exactly.) Is 3
+
+```{r warning=F,message=F}
+exacttwit<-grep("A computer once beat me at chess, but it was no match for me at kickboxing",en_twit)
+length(exacttwit)
+
+
+
+```
+
+##Data Cleaning - remove unwanted characters
+
+```{r warning=F,message=F}
+en_twit_clean<- iconv(en_twit, 'UTF-8', 'ASCII', "byte")
+
+
+
+```
+
+##Get sample of cleaned twits - 10,000 long
+
+```{r warning=F,message=F}
+
+en_twit_clean_Sample<-sample(en_twit_clean, 10000)
+doc.vec <- VectorSource(en_twit_clean_Sample)                      
+doc.corpus <- Corpus(doc.vec)
+
+
+```
+
+##Convert to lower case then remove punctuations then remove digits then remove whitespace then force to plaintext
+
+
+```{r warning=F,message=F}
+doc.corpus<- tm_map(doc.corpus, tolower)
+
+doc.corpus<- tm_map(doc.corpus, removePunctuation)
+
+doc.corpus<- tm_map(doc.corpus, removeNumbers)
+
+doc.corpus<- tm_map(doc.corpus, stripWhitespace)
+
+doc.corpus<- tm_map(doc.corpus, PlainTextDocument)
+
+
+
+```
+
+##Just for fun,  play with wordcloud
+
+```{r warning=F,message=F}
+#library(wordcloud)
+#wordcloud(doc.corpus, max.words = 200, random.order=FALSE,rot.per=0.35,use.r.layout=FALSE,colors=brewer.pal(8, "Dark2"))
+
+```
