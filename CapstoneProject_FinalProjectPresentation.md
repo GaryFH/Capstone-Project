@@ -2,7 +2,7 @@ Capstone Project Final Project Presentation
 ========================================================
 author: GaryFH
 date: 10/27/2017
-#autosize: true
+autosize: true
 
 Data Science Capstone
 by Johns Hopkins University
